@@ -1,4 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 나라장터 검색 도우미
+
+나라장터 입찰공고, 낙찰정보, 계약정보를 검색하고 즐겨찾기하며 Telegram으로 일일 요약을 받는 도구.
+
+## 설정
+
+### 1. 환경 변수 설정
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local` 파일을 편집하여 다음을 입력:
+
+| 변수 | 설명 |
+|------|------|
+| `NARA_SERVICE_KEY` | data.go.kr에서 발급받은 API 키 (설정 페이지에서도 입력 가능) |
+| `TURSO_DATABASE_URL` | Turso DB URL (로컬 개발 시 생략 가능 — file:local.db 사용) |
+| `TURSO_AUTH_TOKEN` | Turso 인증 토큰 (로컬 개발 시 생략 가능) |
+| `CRON_SECRET` | Cron 엔드포인트 보호용 임의 문자열 |
+
+### 2. 나라장터 API 키 발급
+
+1. https://www.data.go.kr 회원가입
+2. "나라장터 공공데이터개방표준서비스" 검색
+3. 활용신청 → 서비스키 발급 (즉시 또는 1-2일 소요)
+
+### 3. Turso DB 설정 (Vercel 배포 시)
+
+```bash
+npm install -g turso
+turso auth login
+turso db create nara
+turso db show nara  # URL 확인
+turso db tokens create nara  # Token 확인
+```
+
+### 4. Vercel 배포
+
+```bash
+npm install -g vercel
+vercel
+```
+
+Vercel 대시보드 → Settings → Environment Variables에 위 변수들 입력.
+Cron은 KST 08:00 (UTC 23:00)에 자동 실행. `vercel.json`에서 조정 가능.
+
+## 로컬 개발
+
+```bash
+npm run dev
+```
+
+http://localhost:3000 → /search 로 자동 이동.
+
+---
+
+(Original Next.js README below)
 
 ## Getting Started
 
