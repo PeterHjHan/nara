@@ -36,4 +36,15 @@ export async function initDb() {
       value TEXT NOT NULL
     )
   `);
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS bid_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      biz_type TEXT NOT NULL,
+      bid_ntce_no TEXT NOT NULL,
+      bid_ntce_ord TEXT NOT NULL DEFAULT '000',
+      raw_data TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(biz_type, bid_ntce_no, bid_ntce_ord)
+    )
+  `);
 }

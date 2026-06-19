@@ -22,3 +22,12 @@ export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+export const bidItems = sqliteTable('bid_items', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  bizType: text('biz_type').notNull(), // 'cnstwk' | 'servc' | 'thng' | 'frgcpt'
+  bidNtceNo: text('bid_ntce_no').notNull(),
+  bidNtceOrd: text('bid_ntce_ord').notNull().default('000'),
+  rawData: text('raw_data').notNull(), // full JSON from API
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+});

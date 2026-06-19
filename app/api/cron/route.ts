@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, initDb } from '@/lib/db';
 import { searchSessions, settings } from '@/lib/schema';
 import { desc, gte } from 'drizzle-orm';
-import { sendTelegramMessage } from '@/lib/telegram';
+import { sendTelegramMessage, sendTelegramSplit } from '@/lib/telegram';
 
 // Called by Vercel Cron or manually
 export async function GET(req: NextRequest) {
@@ -56,43 +56,48 @@ export async function GET(req: NextRequest) {
   let message = `📋 <b>나라장터 일일 요약</b> (${today})\n`;
   message += `━━━━━━━━━━━━━━\n\n`;
 
+  const itemBlocks: string[] = [];
+
   for (const session of todaySessions) {
     const results: Record<string, string>[] = JSON.parse(session.results);
     const label = apiTypeLabel[session.apiType] ?? session.apiType;
     const icon = apiTypeIcon[session.apiType] ?? '🔍';
 
-    message += `${icon} <b>${label}</b> · ${session.resultCount}건\n`;
-    message += `━━━━━━━━━━━━━━━━\n`;
+    // Section header as its own block
+    itemBlocks.push(`${icon} <b>${label}</b> · ${session.resultCount}건\n━━━━━━━━━━━━━━━━\n`);
 
     if (results.length === 0) {
-      message += `결과 없음\n\n`;
+      itemBlocks.push(`결과 없음\n\n`);
       continue;
     }
 
-    results.slice(0, 5).forEach((item, i) => {
+    results.sort((a, b) => Number(b.presmptPrce || b.bdgtAmt || 0) - Number(a.presmptPrce || a.bdgtAmt || 0));
+
+    results.forEach((item, i) => {
       const name = item.bidNtceNm ?? item.cntrctNm ?? '(이름 없음)';
       const institution = item.ntceInsttNm ?? item.cntrctInsttNm ?? item.dmndInsttNm ?? '';
       const amount = item.presmptPrce ?? item.cntrctAmt ?? item.scsbidAmt ?? '';
-      const deadline = item.bidClseDate ?? item.cntrctCnclsDate ?? item.opengDate ?? '';
-      const url = item.bidNtceUrl ??
+      const deadline = item.bidClseDt ?? item.bidClseDate ?? item.cntrctCnclsDate ?? '';
+      const url = item.bidNtceDtlUrl ?? item.bidNtceUrl ??
         (item.bidNtceNo ? `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${item.bidNtceNo}&bidPbancOrd=${item.bidNtceOrd ?? '000'}` : '');
 
-      message += `\n<b>${i + 1}.</b> `;
-      message += url ? `<a href="${url}">${name}</a>` : `${name}`;
-      message += `\n`;
-      if (institution) message += `   🏢 ${institution}\n`;
-      if (amount) message += `   💰 ${formatKRW(amount)}\n`;
-      if (deadline) message += `   📅 마감: ${deadline}\n`;
+      let block = `\n<b>${i + 1}.</b> `;
+      block += url ? `<a href="${url}">${name}</a>` : name;
+      block += `\n`;
+      if (institution) block += `   🏢 ${institution}\n`;
+      if (amount) block += `   💰 ${formatKRW(amount)}\n`;
+      if (deadline) block += `   📅 마감: ${deadline}\n`;
+
+      itemBlocks.push(block);
     });
 
-    if (results.length > 5) {
-      message += `\n   <i>...외 ${results.length - 5}건 더</i>\n`;
-    }
-
-    message += `\n`;
+    itemBlocks.push(`\n`);
   }
 
-  await sendTelegramMessage(message, botToken, chatId);
+  const header = message;
+  const footer = `\n━━━━━━━━━━━━━━`;
+
+  await sendTelegramSplit(header, itemBlocks, footer, botToken, chatId);
   return NextResponse.json({ sent: true, sessions: todaySessions.length });
 }
 

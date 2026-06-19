@@ -1,86 +1,95 @@
 'use client';
 import { useEffect, useState } from 'react';
+import FavoriteButton from '@/components/FavoriteButton';
 
-interface Session {
+interface BidItem extends Record<string, unknown> {
   id: number;
-  apiType: string;
-  searchParams: Record<string, string>;
-  resultCount: number;
-  results: Record<string, unknown>[];
-  searchedAt: string;
+  bizType: string;
+  bidNtceNo: string;
+  bidNtceOrd: string;
+  createdAt: string;
+  bidNtceNm?: string;
+  ntceInsttNm?: string;
+  presmptPrce?: string;
+  asignBdgtAmt?: string;
+  bidClseDt?: string;
+  cntrctCnclsMthdNm?: string;
+  sucsfbidMthdNm?: string;
 }
 
-const apiTypeLabel: Record<string, string> = {
-  bid_cnstwk: '공사',
-  bid_servc:  '용역',
-  bid_thng:   '물품',
-  bid_frgcpt: '외자',
+const BIZ_TYPES = [
+  { id: 'all', label: '전체' },
+  { id: 'cnstwk', label: '공사' },
+  { id: 'servc', label: '용역' },
+  { id: 'thng', label: '물품' },
+  { id: 'frgcpt', label: '외자' },
+];
+
+const SHOW_PAGE: Record<string, string> = {
+  servc: '/bid/servc',
 };
 
-const bsnsDivLabel: Record<string, string> = { '1': '물품', '2': '외자', '3': '공사', '5': '용역' };
-
-function formatParams(apiType: string, params: Record<string, string>) {
-  if (apiType === 'bid') {
-    const from = params.bidNtceBgnDt?.slice(0, 8);
-    const to = params.bidNtceEndDt?.slice(0, 8);
-    return `${from} ~ ${to}`;
-  }
-  if (apiType === 'successful_bid') {
-    const type = bsnsDivLabel[params.bsnsDivCd] ?? params.bsnsDivCd;
-    const from = params.opengBgnDt?.slice(0, 8);
-    const to = params.opengEndDt?.slice(0, 8);
-    return `${type} | ${from} ~ ${to}`;
-  }
-  const from = params.cntrctCnclsBgnDate;
-  const to = params.cntrctCnclsEndDate;
-  return `${from} ~ ${to}${params.insttCd ? ` | 기관: ${params.insttCd}` : ''}`;
-}
-
-function getFirstItemName(results: Record<string, unknown>[]) {
-  if (!results.length) return null;
-  const first = results[0];
-  return String(first.bidNtceNm ?? first.cntrctNm ?? first.bidNtceNo ?? '');
+function fmtKRW(val: string | undefined) {
+  if (!val) return '-';
+  const n = Number(val);
+  if (isNaN(n)) return val;
+  return new Intl.NumberFormat('ko-KR').format(n) + '원';
 }
 
 export default function HistoryPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [items, setItems] = useState<BidItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<number | null>(null);
   const [filter, setFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const [favIds, setFavIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch('/api/history?limit=100').then(r => r.json()).then(setSessions).finally(() => setLoading(false));
+    fetch('/api/bid-items?limit=500')
+      .then(r => r.json())
+      .then(setItems)
+      .finally(() => setLoading(false));
   }, []);
 
-  const filtered = sessions.filter(s => {
-    if (filter !== 'all' && !s.apiType.includes(filter)) return false;
-    if (dateFilter && !s.searchedAt.startsWith(dateFilter)) return false;
+  const filtered = items.filter(item => {
+    if (filter !== 'all' && item.bizType !== filter) return false;
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      return (
+        item.bidNtceNm?.toLowerCase().includes(kw) ||
+        item.ntceInsttNm?.toLowerCase().includes(kw) ||
+        item.bidNtceNo?.toLowerCase().includes(kw)
+      );
+    }
     return true;
   });
 
   // Group by date
-  const grouped: Record<string, Session[]> = {};
-  for (const s of filtered) {
-    const date = s.searchedAt.slice(0, 10);
+  const grouped: Record<string, BidItem[]> = {};
+  for (const item of filtered) {
+    const date = item.createdAt.slice(0, 10);
     if (!grouped[date]) grouped[date] = [];
-    grouped[date].push(s);
+    grouped[date].push(item);
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-gray-900">검색 기록</h1>
-        <div className="flex gap-2 flex-wrap">
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <h1 className="text-xl font-bold text-gray-900">공고 목록</h1>
+        <div className="flex gap-2 flex-wrap items-center">
           <input
-            type="date"
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            type="text"
+            placeholder="공고명·기관 검색..."
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {['all', 'cnstwk', 'servc', 'thng', 'frgcpt'].map(t => (
-            <button key={t} onClick={() => setFilter(t)} className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {t === 'all' ? '전체' : (apiTypeLabel[`bid_${t}`] ?? t)}
+          {BIZ_TYPES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setFilter(t.id)}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filter === t.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              {t.label}
             </button>
           ))}
         </div>
@@ -88,73 +97,95 @@ export default function HistoryPage() {
 
       {loading && <div className="text-center py-16 text-gray-400">불러오는 중...</div>}
 
-      {!loading && Object.keys(grouped).length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-4xl mb-3">📅</p>
-          <p className="text-sm">검색 기록이 없습니다.</p>
+          <p className="text-4xl mb-3">📋</p>
+          <p className="text-sm">검색된 공고가 없습니다. 먼저 검색을 실행해주세요.</p>
         </div>
       )}
 
-      {Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).map(([date, list]) => (
-        <div key={date} className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
-            <span className="h-px flex-1 bg-gray-200" />
-            {date}
-            <span className="h-px flex-1 bg-gray-200" />
-          </h2>
-          <div className="space-y-2">
-            {list.map(s => (
-              <div key={s.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div
-                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => setExpanded(expanded === s.id ? null : s.id)}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded shrink-0">{apiTypeLabel[s.apiType]}</span>
-                    <span className="text-xs text-gray-400 shrink-0">{s.searchedAt.slice(11, 16)}</span>
-                    <span className="text-sm text-gray-700 truncate">{formatParams(s.apiType, s.searchParams)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-sm font-medium text-gray-900">{s.resultCount.toLocaleString()}건</span>
-                    <span className="text-gray-400 text-xs">{expanded === s.id ? '▲' : '▼'}</span>
-                  </div>
-                </div>
+      {Object.entries(grouped)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([date, dayItems]) => (
+          <div key={date} className="mb-8">
+            <h2 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+              <span className="h-px flex-1 bg-gray-200" />
+              {date} · {dayItems.length}건
+              <span className="h-px flex-1 bg-gray-200" />
+            </h2>
 
-                {expanded === s.id && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
-                    {s.results.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-400">결과 없음</p>
-                    ) : (
-                      <table className="w-full text-xs">
-                        <tbody className="divide-y divide-gray-50">
-                          {s.results.slice(0, 20).map((item, i) => {
-                            const name = String(item.bidNtceNm ?? item.cntrctNm ?? item.bidNtceNo ?? item.cntrctNo ?? '');
-                            const url = item.bidNtceUrl as string | undefined ??
-                              (item.bidNtceNo ? `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${item.bidNtceNo}&bidPbancOrd=${item.bidNtceOrd ?? '000'}` : undefined);
-                            return (
-                              <tr key={i} className="hover:bg-gray-50">
-                                <td className="px-4 py-2 text-gray-400 w-8">{i + 1}</td>
-                                <td className="px-4 py-2 font-medium text-gray-800">
-                                  {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{name}</a> : name}
-                                </td>
-                                <td className="px-4 py-2 text-gray-500">{String(item.bsnsDivNm ?? '')}</td>
-                                <td className="px-4 py-2 text-gray-500">{String(item.ntceInsttNm ?? item.cntrctInsttNm ?? '')}</td>
-                              </tr>
-                            );
-                          })}
-                          {s.results.length > 20 && (
-                            <tr><td colSpan={4} className="px-4 py-2 text-gray-400">...외 {s.results.length - 20}건</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">★</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">구분</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고번호</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[280px]">공고명</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">추정가격</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">계약방법</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고기관</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">마감일시</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {dayItems
+                      .sort((a, b) => Number(b.presmptPrce || b.asignBdgtAmt || 0) - Number(a.presmptPrce || a.asignBdgtAmt || 0))
+                      .map((item) => {
+                        const itemId = `${item.bidNtceNo}-${item.bidNtceOrd}`;
+                        const showUrl = SHOW_PAGE[item.bizType]
+                          ? `${SHOW_PAGE[item.bizType]}/${itemId}`
+                          : undefined;
+                        const g2bUrl = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${item.bidNtceNo}&bidPbancOrd=${item.bidNtceOrd}`;
+                        const isFav = favIds.has(itemId);
+
+                        return (
+                          <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-3 py-3">
+                              <FavoriteButton
+                                apiType={`bid_${item.bizType}`}
+                                itemId={itemId}
+                                itemData={item}
+                                initialFavorited={isFav}
+                                onToggle={fav => setFavIds(prev => {
+                                  const s = new Set(prev);
+                                  fav ? s.add(itemId) : s.delete(itemId);
+                                  return s;
+                                })}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className="inline-block text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded whitespace-nowrap">
+                                {BIZ_TYPES.find(t => t.id === item.bizType)?.label ?? item.bizType}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
+                              <a href={g2bUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                {item.bidNtceNo}
+                              </a>
+                            </td>
+                            <td className="px-3 py-3 font-medium text-gray-900">
+                              {showUrl
+                                ? <a href={showUrl} className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm ?? '-'}</a>
+                                : <a href={g2bUrl} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm ?? '-'}</a>
+                              }
+                            </td>
+                            <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap text-right">
+                              {fmtKRW(item.presmptPrce || item.asignBdgtAmt)}
+                            </td>
+                            <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{item.cntrctCnclsMthdNm ?? '-'}</td>
+                            <td className="px-3 py-3 text-xs text-gray-600 max-w-[160px] truncate">{item.ntceInsttNm ?? '-'}</td>
+                            <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{item.bidClseDt?.slice(0, 16) ?? '-'}</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
     </div>
   );
 }

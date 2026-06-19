@@ -67,7 +67,9 @@ export default function SearchPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Search failed');
-      setResults(data.items ?? []);
+      const items: Record<string, string>[] = data.items ?? [];
+      items.sort((a, b) => Number(b.presmptPrce || b.bdgtAmt || 0) - Number(a.presmptPrce || a.bdgtAmt || 0));
+      setResults(items);
       setTotalCount(data.totalCount ?? 0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
@@ -87,6 +89,13 @@ export default function SearchPage() {
     item.bidNtceNo
       ? `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${item.bidNtceNo}&bidPbancOrd=${item.bidNtceOrd ?? '000'}`
       : undefined;
+
+  const getShowUrl = (item: Record<string, string>) => {
+    if (!item.bidNtceNo) return undefined;
+    const ord = item.bidNtceOrd ?? '000';
+    if (bizType === 'servc') return `/bid/servc/${item.bidNtceNo}-${ord}`;
+    return undefined;
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
@@ -212,6 +221,7 @@ export default function SearchPage() {
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">★</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고번호</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[280px]">공고명</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">추정가격</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">계약방법</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고기관</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고일시</th>
@@ -244,10 +254,15 @@ export default function SearchPage() {
                               : item.bidNtceNo}
                           </td>
                           <td className="px-3 py-3 font-medium text-gray-900">
-                            {url
-                              ? <a href={url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm}</a>
-                              : <span className="line-clamp-2">{item.bidNtceNm}</span>}
+                            {(() => {
+                              const showUrl = getShowUrl(item);
+                              const label = <span className="line-clamp-2">{item.bidNtceNm}</span>;
+                              if (showUrl) return <a href={showUrl} className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm}</a>;
+                              if (url) return <a href={url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm}</a>;
+                              return label;
+                            })()}
                           </td>
+                          <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap text-right">{formatKRW(item.presmptPrce || item.bdgtAmt)}</td>
                           <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{item.cntrctCnclsMthdNm}</td>
                           <td className="px-3 py-3 text-xs text-gray-600 max-w-[160px] truncate">{item.ntceInsttNm}</td>
                           <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{item.bidNtceDt?.slice(0, 16)}</td>

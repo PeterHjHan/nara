@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, initDb } from '@/lib/db';
-import { searchSessions, settings } from '@/lib/schema';
+import { searchSessions, settings, bidItems } from '@/lib/schema';
 import { fetchBidNotices } from '@/lib/nara-api';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   await initDb();
@@ -24,6 +24,22 @@ export async function POST(req: NextRequest) {
       resultCount: result.totalCount,
       results: JSON.stringify(result.items),
     });
+
+    // Upsert each item into bid_items
+    for (const item of result.items) {
+      const no = item.bidNtceNo;
+      const ord = item.bidNtceOrd ?? '000';
+      if (!no) continue;
+      await db.insert(bidItems).values({
+        bizType: params.bizType,
+        bidNtceNo: no,
+        bidNtceOrd: ord,
+        rawData: JSON.stringify(item),
+      }).onConflictDoUpdate({
+        target: [bidItems.bizType, bidItems.bidNtceNo, bidItems.bidNtceOrd],
+        set: { rawData: sql`excluded.raw_data` },
+      });
+    }
 
     return NextResponse.json(result);
   } catch (err: unknown) {
