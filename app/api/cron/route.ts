@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
   const configMap: Record<string, string> = {};
   for (const row of config) configMap[row.key] = row.value;
 
-  const botToken = configMap['telegram_bot_token'];
-  const chatId = configMap['telegram_chat_id'];
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || configMap['telegram_bot_token'];
+  const chatId = process.env.TELEGRAM_CHAT_ID || configMap['telegram_chat_id'];
 
   if (!botToken || !chatId) {
     return NextResponse.json({ error: 'Telegram not configured' }, { status: 400 });
