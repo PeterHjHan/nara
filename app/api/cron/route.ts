@@ -34,44 +34,72 @@ export async function GET(req: NextRequest) {
     .orderBy(desc(searchSessions.searchedAt));
 
   if (todaySessions.length === 0) {
-    const msg = `📋 <b>나라장터 일일 요약</b>\n\n오늘(${today})은 검색 기록이 없습니다.`;
+    const msg = `📋 <b>나라장터 일일 요약</b> (${today})\n\n오늘은 검색 기록이 없습니다.`;
     await sendTelegramMessage(msg, botToken, chatId);
     return NextResponse.json({ sent: true, sessions: 0 });
   }
 
   const apiTypeLabel: Record<string, string> = {
-    bid: '입찰공고',
-    successful_bid: '낙찰정보',
-    contract: '계약정보',
+    bid_cnstwk: '입찰공고 (공사)',
+    bid_servc:  '입찰공고 (용역)',
+    bid_thng:   '입찰공고 (물품)',
+    bid_frgcpt: '입찰공고 (외자)',
   };
 
-  let message = `📋 <b>나라장터 일일 요약</b> (${today})\n\n`;
-  message += `총 ${todaySessions.length}건의 검색이 있었습니다.\n\n`;
+  const apiTypeIcon: Record<string, string> = {
+    bid_cnstwk: '🏗️',
+    bid_servc:  '🛠️',
+    bid_thng:   '📦',
+    bid_frgcpt: '🌐',
+  };
 
-  for (const session of todaySessions.slice(0, 10)) {
-    const params = JSON.parse(session.searchParams);
-    const results = JSON.parse(session.results);
+  let message = `📋 <b>나라장터 일일 요약</b> (${today})\n`;
+  message += `━━━━━━━━━━━━━━\n\n`;
+
+  for (const session of todaySessions) {
+    const results: Record<string, string>[] = JSON.parse(session.results);
     const label = apiTypeLabel[session.apiType] ?? session.apiType;
-    const time = session.searchedAt.split('T')[1]?.slice(0, 5) ?? '';
+    const icon = apiTypeIcon[session.apiType] ?? '🔍';
 
-    message += `🔍 <b>[${label}]</b> ${time}\n`;
-    message += `   검색조건: ${formatParams(session.apiType, params)}\n`;
-    message += `   결과: ${session.resultCount}건`;
+    message += `${icon} <b>${label}</b> · ${session.resultCount}건\n`;
+    message += `━━━━━━━━━━━━━━━━\n`;
 
-    if (results.length > 0) {
-      const first = results[0];
-      const name = first.bidNtceNm ?? first.cntrctNm ?? first.bidNtceNo ?? '(이름 없음)';
-      message += `\n   첫 번째: ${name}`;
+    if (results.length === 0) {
+      message += `결과 없음\n\n`;
+      continue;
     }
-    message += '\n\n';
-  }
 
-  if (todaySessions.length > 10) {
-    message += `...외 ${todaySessions.length - 10}건 더`;
+    results.slice(0, 5).forEach((item, i) => {
+      const name = item.bidNtceNm ?? item.cntrctNm ?? '(이름 없음)';
+      const institution = item.ntceInsttNm ?? item.cntrctInsttNm ?? item.dmndInsttNm ?? '';
+      const amount = item.presmptPrce ?? item.cntrctAmt ?? item.scsbidAmt ?? '';
+      const deadline = item.bidClseDate ?? item.cntrctCnclsDate ?? item.opengDate ?? '';
+      const url = item.bidNtceUrl ??
+        (item.bidNtceNo ? `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${item.bidNtceNo}&bidPbancOrd=${item.bidNtceOrd ?? '000'}` : '');
+
+      message += `\n<b>${i + 1}.</b> `;
+      message += url ? `<a href="${url}">${name}</a>` : `${name}`;
+      message += `\n`;
+      if (institution) message += `   🏢 ${institution}\n`;
+      if (amount) message += `   💰 ${formatKRW(amount)}\n`;
+      if (deadline) message += `   📅 마감: ${deadline}\n`;
+    });
+
+    if (results.length > 5) {
+      message += `\n   <i>...외 ${results.length - 5}건 더</i>\n`;
+    }
+
+    message += `\n`;
   }
 
   await sendTelegramMessage(message, botToken, chatId);
   return NextResponse.json({ sent: true, sessions: todaySessions.length });
+}
+
+function formatKRW(val: string): string {
+  const n = Number(val);
+  if (isNaN(n)) return val;
+  return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
 }
 
 function formatParams(apiType: string, params: Record<string, string>): string {

@@ -11,9 +11,10 @@ interface Session {
 }
 
 const apiTypeLabel: Record<string, string> = {
-  bid: '입찰공고',
-  successful_bid: '낙찰정보',
-  contract: '계약정보',
+  bid_cnstwk: '공사',
+  bid_servc:  '용역',
+  bid_thng:   '물품',
+  bid_frgcpt: '외자',
 };
 
 const bsnsDivLabel: Record<string, string> = { '1': '물품', '2': '외자', '3': '공사', '5': '용역' };
@@ -53,7 +54,7 @@ export default function HistoryPage() {
   }, []);
 
   const filtered = sessions.filter(s => {
-    if (filter !== 'all' && s.apiType !== filter) return false;
+    if (filter !== 'all' && !s.apiType.includes(filter)) return false;
     if (dateFilter && !s.searchedAt.startsWith(dateFilter)) return false;
     return true;
   });
@@ -77,9 +78,9 @@ export default function HistoryPage() {
             onChange={e => setDateFilter(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {['all', 'bid', 'successful_bid', 'contract'].map(t => (
+          {['all', 'cnstwk', 'servc', 'thng', 'frgcpt'].map(t => (
             <button key={t} onClick={() => setFilter(t)} className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {t === 'all' ? '전체' : apiTypeLabel[t]}
+              {t === 'all' ? '전체' : (apiTypeLabel[`bid_${t}`] ?? t)}
             </button>
           ))}
         </div>

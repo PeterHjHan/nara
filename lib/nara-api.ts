@@ -1,25 +1,15 @@
-const BASE_URL = 'http://apis.data.go.kr/1230000/ao/PubDataOpnStdService';
+const BASE_URL = 'https://apis.data.go.kr/1230000/ad/BidPublicInfoService';
+
+// inqryDiv: 1=등록일시, 2=입찰공고번호, 3=변경일시
+export type InqryDiv = '1' | '2' | '3';
+export type BizType = 'cnstwk' | 'servc' | 'frgcpt' | 'thng'; // 공사, 용역, 외자, 물품
 
 export interface BidSearchParams {
-  bidNtceBgnDt: string; // YYYYMMDDHHMM
-  bidNtceEndDt: string; // YYYYMMDDHHMM
-  numOfRows?: number;
-  pageNo?: number;
-}
-
-export interface SuccessfulBidSearchParams {
-  bsnsDivCd: string; // 1=물품, 2=외자, 3=공사, 5=용역
-  opengBgnDt: string; // YYYYMMDDHHMM
-  opengEndDt: string; // YYYYMMDDHHMM
-  numOfRows?: number;
-  pageNo?: number;
-}
-
-export interface ContractSearchParams {
-  cntrctCnclsBgnDate: string; // YYYYMMDD
-  cntrctCnclsEndDate: string; // YYYYMMDD
-  insttDivCd?: string; // 1=계약기관, 2=수요기관
-  insttCd?: string;
+  bizType: BizType;
+  inqryDiv: InqryDiv;
+  inqryBgnDt?: string; // YYYYMMDDHHMM — required when inqryDiv is '1' or '3'
+  inqryEndDt?: string; // YYYYMMDDHHMM — required when inqryDiv is '1' or '3'
+  bidNtceNo?: string;  // required when inqryDiv is '2'
   numOfRows?: number;
   pageNo?: number;
 }
@@ -31,44 +21,67 @@ export interface ApiResponse<T> {
   numOfRows: number;
 }
 
-async function fetchNara<T>(endpoint: string, params: Record<string, string | number | undefined>): Promise<ApiResponse<T>> {
+const ENDPOINT_MAP: Record<BizType, string> = {
+  cnstwk: 'getBidPblancListInfoCnstwk',
+  servc:  'getBidPblancListInfoServc',
+  frgcpt: 'getBidPblancListInfoFrgcpt',
+  thng:   'getBidPblancListInfoThng',
+};
+
+export const BIZ_TYPE_LABEL: Record<BizType, string> = {
+  cnstwk: '공사',
+  servc:  '용역',
+  frgcpt: '외자',
+  thng:   '물품',
+};
+
+export const INQRY_DIV_LABEL: Record<InqryDiv, string> = {
+  '1': '등록일시',
+  '2': '입찰공고번호',
+  '3': '변경일시',
+};
+
+export async function fetchBidNotices(params: BidSearchParams): Promise<ApiResponse<Record<string, string>>> {
   const serviceKey = process.env.NARA_SERVICE_KEY;
   if (!serviceKey) throw new Error('NARA_SERVICE_KEY is not set');
 
-  const query = new URLSearchParams({ ServiceKey: serviceKey, type: 'json', numOfRows: '100', pageNo: '1' });
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== '') query.set(k, String(v));
-  }
+  const endpoint = ENDPOINT_MAP[params.bizType];
+  const query = new URLSearchParams({
+    ServiceKey: serviceKey,
+    type: 'json',
+    numOfRows: String(params.numOfRows ?? 100),
+    pageNo: String(params.pageNo ?? 1),
+    inqryDiv: params.inqryDiv,
+  });
+
+  if (params.inqryBgnDt) query.set('inqryBgnDt', params.inqryBgnDt);
+  if (params.inqryEndDt) query.set('inqryEndDt', params.inqryEndDt);
+  if (params.bidNtceNo)  query.set('bidNtceNo',  params.bidNtceNo);
 
   const url = `${BASE_URL}/${endpoint}?${query}`;
-  const res = await fetch(url, { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const res = await fetch(url, { cache: 'no-store' });
 
-  const data = await res.json();
-
-  // Handle both JSON and error responses
-  if (data.response) {
-    const body = data.response.body;
-    const items = body?.items?.item ?? [];
-    return {
-      items: Array.isArray(items) ? items : [items],
-      totalCount: body?.totalCount ?? 0,
-      pageNo: body?.pageNo ?? 1,
-      numOfRows: body?.numOfRows ?? 100,
-    };
+  const text = await res.text();
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`API returned non-JSON response: ${text.slice(0, 200)}`);
   }
 
-  throw new Error(data?.response?.header?.resultMsg ?? 'Unknown API error');
-}
+  const header = (data.response as Record<string, unknown>)?.header as Record<string, string> | undefined;
+  if (header?.resultCode !== '00') {
+    throw new Error(`API error: ${header?.resultMsg ?? 'Unknown'}`);
+  }
 
-export async function fetchBidNotices(params: BidSearchParams, page = 1) {
-  return fetchNara('getDataSetOpnStdBidPblancInfo', { ...params, pageNo: page });
-}
+  const body = (data.response as Record<string, unknown>)?.body as Record<string, unknown> | undefined;
+  const raw = (body?.items as Record<string, unknown>)?.item ?? [];
+  const items = Array.isArray(raw) ? raw : [raw];
 
-export async function fetchSuccessfulBids(params: SuccessfulBidSearchParams, page = 1) {
-  return fetchNara('getDataSetOpnStdScsbidInfo', { ...params, pageNo: page });
-}
-
-export async function fetchContracts(params: ContractSearchParams, page = 1) {
-  return fetchNara('getDataSetOpnStdCntrctInfo', { ...params, pageNo: page });
+  return {
+    items: items as Record<string, string>[],
+    totalCount: Number(body?.totalCount ?? 0),
+    pageNo: Number(body?.pageNo ?? 1),
+    numOfRows: Number(body?.numOfRows ?? 100),
+  };
 }

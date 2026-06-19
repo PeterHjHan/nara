@@ -10,9 +10,10 @@ interface Favorite {
 }
 
 const apiTypeLabel: Record<string, string> = {
-  bid: '입찰공고',
-  successful_bid: '낙찰정보',
-  contract: '계약정보',
+  bid_cnstwk: '공사',
+  bid_servc:  '용역',
+  bid_thng:   '물품',
+  bid_frgcpt: '외자',
 };
 
 function formatKRW(val: unknown) {
@@ -58,13 +59,13 @@ export default function FavoritesPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">즐겨찾기</h1>
         <div className="flex gap-2">
-          {['all', 'bid', 'successful_bid', 'contract'].map(t => (
+          {(['all', 'bid_cnstwk', 'bid_servc', 'bid_thng', 'bid_frgcpt'] as const).map(t => (
             <button
               key={t}
               onClick={() => setFilter(t)}
               className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              {t === 'all' ? '전체' : apiTypeLabel[t]}
+              {t === 'all' ? '전체' : (apiTypeLabel[t] ?? t)}
             </button>
           ))}
         </div>
