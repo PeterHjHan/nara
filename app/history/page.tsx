@@ -44,10 +44,13 @@ export default function HistoryPage() {
   const [favIds, setFavIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch('/api/bid-items?limit=500')
-      .then(r => r.json())
-      .then(setItems)
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch('/api/bid-items?limit=500').then(r => r.json()),
+      fetch('/api/favorites').then(r => r.json()),
+    ]).then(([bidData, favData]) => {
+      setItems(bidData);
+      setFavIds(new Set(favData.map((f: { itemId: string }) => f.itemId)));
+    }).finally(() => setLoading(false));
   }, []);
 
   const filtered = items.filter(item => {
@@ -161,15 +164,14 @@ export default function HistoryPage() {
                               </span>
                             </td>
                             <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
-                              <a href={g2bUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              <a href={showUrl ?? g2bUrl} {...(!showUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="text-blue-600 hover:underline">
                                 {item.bidNtceNo}
                               </a>
                             </td>
                             <td className="px-3 py-3 font-medium text-gray-900">
-                              {showUrl
-                                ? <a href={showUrl} className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm ?? '-'}</a>
-                                : <a href={g2bUrl} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline line-clamp-2">{item.bidNtceNm ?? '-'}</a>
-                              }
+                              <a href={showUrl ?? g2bUrl} {...(!showUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="hover:text-blue-600 hover:underline line-clamp-2">
+                                {item.bidNtceNm ?? '-'}
+                              </a>
                             </td>
                             <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap text-right">
                               {fmtKRW(item.presmptPrce || item.asignBdgtAmt)}

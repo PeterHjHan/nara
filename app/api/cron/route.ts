@@ -24,15 +24,13 @@ const BIZ_ICON: Record<BizType, string> = {
   frgcpt: '🌐',
 };
 
-// Show pages exist only for these biz types
-const SHOW_PAGE: Partial<Record<BizType, string>> = {
-  servc: `${APP_URL}/bid/servc`,
-};
+// Biz types that have show pages
+const HAS_SHOW_PAGE = new Set<BizType>(['servc']);
 
 function itemUrl(bizType: BizType, item: Record<string, string>): string {
   const no = item.bidNtceNo;
   const ord = item.bidNtceOrd ?? '000';
-  if (no && SHOW_PAGE[bizType]) return `${SHOW_PAGE[bizType]}/${no}-${ord}`;
+  if (no && HAS_SHOW_PAGE.has(bizType)) return `${APP_URL}/go/${bizType}/${no}-${ord}`;
   return `${APP_URL}/history`;
 }
 
