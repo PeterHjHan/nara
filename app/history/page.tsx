@@ -124,7 +124,7 @@ export default function HistoryPage() {
                     <tr>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">★</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">구분</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">공고번호</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">검색한 날짜</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[280px]">공고명</th>
                       <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">추정가격</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">계약방법</th>
@@ -163,10 +163,8 @@ export default function HistoryPage() {
                                 {BIZ_TYPES.find(t => t.id === item.bizType)?.label ?? item.bizType}
                               </span>
                             </td>
-                            <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
-                              <a href={showUrl ?? g2bUrl} {...(!showUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="text-blue-600 hover:underline">
-                                {item.bidNtceNo}
-                              </a>
+                            <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                              {item.createdAt?.slice(0, 16) ?? '-'}
                             </td>
                             <td className="px-3 py-3 font-medium text-gray-900">
                               <a href={showUrl ?? g2bUrl} {...(!showUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="hover:text-blue-600 hover:underline line-clamp-2">

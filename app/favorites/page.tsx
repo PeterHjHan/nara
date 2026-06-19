@@ -27,10 +27,16 @@ function getItemName(f: Favorite) {
   return String(d.bidNtceNm ?? d.cntrctNm ?? d.bidNtceNo ?? d.cntrctNo ?? '(이름 없음)');
 }
 
-function getItemUrl(f: Favorite) {
+const SHOW_PAGE: Record<string, string> = {
+  bid_servc: '/bid/servc',
+};
+
+function getItemUrl(f: Favorite): { href: string; external: boolean } | null {
   const d = f.itemData;
-  if (d.bidNtceUrl) return String(d.bidNtceUrl);
-  if (d.bidNtceNo) return `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${d.bidNtceNo}&bidPbancOrd=${d.bidNtceOrd ?? '000'}`;
+  const no = d.bidNtceNo ? String(d.bidNtceNo) : null;
+  const ord = d.bidNtceOrd ? String(d.bidNtceOrd) : '000';
+  if (no && SHOW_PAGE[f.apiType]) return { href: `${SHOW_PAGE[f.apiType]}/${no}-${ord}`, external: false };
+  if (no) return { href: `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${no}&bidPbancOrd=${ord}`, external: true };
   return null;
 }
 
@@ -85,6 +91,7 @@ export default function FavoritesPage() {
         {filtered.map(f => {
           const name = getItemName(f);
           const url = getItemUrl(f);
+
           return (
             <div key={f.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -93,7 +100,7 @@ export default function FavoritesPage() {
                   <span className="text-xs text-gray-400">{f.createdAt?.slice(0, 10)}</span>
                 </div>
                 {url ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-900 hover:text-blue-600 hover:underline line-clamp-2">
+                  <a href={url.href} {...(url.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="font-medium text-gray-900 hover:text-blue-600 hover:underline line-clamp-2">
                     {name}
                   </a>
                 ) : (
