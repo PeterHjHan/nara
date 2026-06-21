@@ -48,6 +48,33 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Telegram not configured' }, { status: 400 });
   }
 
+  // Load keyword lists from settings (empty = no filter = include all)
+  const parseKeywords = (raw: string | undefined) =>
+    (raw ?? '').split('\n').map(k => k.trim()).filter(Boolean);
+  const dminsttKeywords = parseKeywords(configMap['keyword_dminstt']);
+  const bidntceKeywords = parseKeywords(configMap['keyword_bidntce']);
+  const hasKeywords = dminsttKeywords.length > 0 || bidntceKeywords.length > 0;
+
+  function matchesKeywords(item: Record<string, string>): boolean {
+    if (!hasKeywords) return true;
+    const inst = (item.dminsttNm ?? '') + ' ' + (item.ntceInsttNm ?? '');
+    const name = item.bidNtceNm ?? '';
+    return (
+      dminsttKeywords.some(k => inst.includes(k)) ||
+      bidntceKeywords.some(k => name.includes(k))
+    );
+  }
+
+  function isSmlbizRestricted(item: Record<string, string>): boolean {
+    // 중소기업/소기업 restriction fields
+    return (
+      item.smlbizPrityPuchaseTrgtYn === 'Y' ||
+      item.smlbizCompetPrdctYn === 'Y' ||
+      (item.indstrytyLmtCn ?? '').includes('중소') ||
+      (item.bidPrtcptLmtYn === 'Y' && (item.indstrytyLmtCn ?? '').includes('소기업'))
+    );
+  }
+
   const { inqryBgnDt, inqryEndDt, isMorning, todayStr } = getDateRange(new Date());
   const runLabel = isMorning ? '오전' : '오후';
   const dateLabel = `${todayStr.slice(0,4)}-${todayStr.slice(4,6)}-${todayStr.slice(6,8)}`;
@@ -73,10 +100,11 @@ export async function GET(req: NextRequest) {
         inqryEndDt,
       });
 
-      // Filter out afternoon duplicates before saving or messaging
-      const newItems = isMorning
+      // Filter out afternoon duplicates, then apply keyword filter
+      const deduped = isMorning
         ? result.items
         : result.items.filter(item => !existingTodayNos.has(item.bidNtceNo));
+      const newItems = deduped.filter(matchesKeywords);
 
       await db.insert(searchSessions).values({
         apiType: `bid_${bizType}`,
@@ -127,8 +155,10 @@ export async function GET(req: NextRequest) {
         const amount      = item.presmptPrce || item.asignBdgtAmt || '';
         const deadline    = item.bidClseDt ?? '';
         const url         = itemUrl(bizType, item);
+        const restricted  = isSmlbizRestricted(item);
 
         let block = `\n<b>${i + 1}.</b> <a href="${url}">${name}</a>\n`;
+        if (restricted)  block += `   ⚠️ <b>[판정 보류/제외]</b> 중소기업 참여제한\n`;
         if (institution) block += `   🏢 ${institution}\n`;
         if (amount)      block += `   💰 ${formatKRW(amount)}\n`;
         if (deadline)    block += `   📅 마감: ${deadline.slice(0, 16)}\n`;

@@ -7,6 +7,8 @@ interface Settings {
   telegram_chat_id?: string;
   cron_hour?: string;
   cron_minute?: string;
+  keyword_dminstt?: string; // 수요기관 keywords, one per line
+  keyword_bidntce?: string; // 공고명 keywords, one per line
 }
 
 export default function SettingsPage() {
@@ -162,6 +164,42 @@ export default function SettingsPage() {
           <div className="mt-3 bg-yellow-50 rounded-lg p-3 text-xs text-yellow-700">
             ⚠️ Vercel Cron은 UTC 기준입니다. KST {settings.cron_hour ?? '8'}:{(settings.cron_minute ?? '0').padStart(2, '0')} = UTC {(Number(settings.cron_hour ?? 8) - 9 + 24) % 24}:{(settings.cron_minute ?? '0').padStart(2, '0')} 에 실행됩니다.
             vercel.json의 cron 시간을 직접 수정하거나 <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline">Vercel 대시보드</a>에서 설정하세요.
+          </div>
+        </section>
+
+        {/* Monitoring Keywords */}
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <h2 className="font-semibold text-gray-800 mb-1">모니터링 키워드</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            크론 알림에 포함할 공고를 필터링합니다. 둘 중 하나라도 일치하면 포함됩니다. 키워드는 한 줄에 하나씩 입력하세요.
+          </p>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">수요기관 키워드</label>
+            <p className="text-xs text-gray-400 mb-2">dminsttNm(수요기관명) 또는 ntceInsttNm(공고기관명)에 포함된 경우 매칭</p>
+            <textarea
+              rows={6}
+              value={settings.keyword_dminstt ?? '외교부\n한국국제협력단\n해외건설협회\n한국해외인프라도시개발지원공사\nKOICA'}
+              onChange={e => setSettings(s => ({ ...s, keyword_dminstt: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              placeholder="외교부&#10;한국국제협력단&#10;KOICA"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">공고명 키워드</label>
+            <p className="text-xs text-gray-400 mb-2">bidNtceNm(공고명)에 포함된 경우 매칭</p>
+            <textarea
+              rows={8}
+              value={settings.keyword_bidntce ?? 'ODA\nPMC\nPMO\n종료평가\n성과평가\n타당성조사\nF/S\n컨설팅\n기획조사\n심층조사\n예비타당성'}
+              onChange={e => setSettings(s => ({ ...s, keyword_bidntce: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              placeholder="ODA&#10;PMC&#10;PMO&#10;종료평가"
+            />
+          </div>
+
+          <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+            키워드가 비어있으면 전체 공고를 포함합니다.
           </div>
         </section>
 
