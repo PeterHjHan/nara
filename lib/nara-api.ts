@@ -41,6 +41,24 @@ export const INQRY_DIV_LABEL: Record<InqryDiv, string> = {
   '3': '변경일시',
 };
 
+// Fetches all pages until a page returns fewer items than the page size.
+export async function fetchAllBidNotices(params: BidSearchParams): Promise<ApiResponse<Record<string, string>>> {
+  const PAGE_SIZE = 100;
+  let pageNo = 1;
+  let allItems: Record<string, string>[] = [];
+  let totalCount = 0;
+
+  while (true) {
+    const result = await fetchBidNotices({ ...params, numOfRows: PAGE_SIZE, pageNo });
+    totalCount = result.totalCount;
+    allItems = allItems.concat(result.items);
+    if (result.items.length < PAGE_SIZE) break;
+    pageNo++;
+  }
+
+  return { items: allItems, totalCount, pageNo, numOfRows: PAGE_SIZE };
+}
+
 export async function fetchBidNotices(params: BidSearchParams): Promise<ApiResponse<Record<string, string>>> {
   const serviceKey = process.env.NARA_SERVICE_KEY;
   if (!serviceKey) throw new Error('NARA_SERVICE_KEY is not set');

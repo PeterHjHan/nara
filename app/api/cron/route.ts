@@ -1,34 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, initDb } from '@/lib/db';
 import { searchSessions, settings, bidItems } from '@/lib/schema';
-import { fetchBidNotices } from '@/lib/nara-api';
-import { sql } from 'drizzle-orm';
+import { fetchAllBidNotices } from '@/lib/nara-api';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { sendTelegramMessage, sendTelegramSplit } from '@/lib/telegram';
+import { getDateRange } from '@/lib/cron-dates';
 import type { BizType } from '@/lib/nara-api';
 
 const APP_URL = 'https://nara-chi.vercel.app';
-
 const BIZ_TYPES: BizType[] = ['cnstwk', 'servc', 'thng', 'frgcpt'];
-
-const BIZ_LABEL: Record<BizType, string> = {
-  cnstwk: '공사',
-  servc:  '용역',
-  thng:   '물품',
-  frgcpt: '외자',
-};
-
-const BIZ_ICON: Record<BizType, string> = {
-  cnstwk: '🏗️',
-  servc:  '🛠️',
-  thng:   '📦',
-  frgcpt: '🌐',
-};
-
-// Biz types that have show pages
+const BIZ_LABEL: Record<BizType, string> = { cnstwk: '공사', servc: '용역', thng: '물품', frgcpt: '외자' };
+const BIZ_ICON: Record<BizType, string>  = { cnstwk: '🏗️', servc: '🛠️', thng: '📦', frgcpt: '🌐' };
 const HAS_SHOW_PAGE = new Set<BizType>(['servc']);
 
+// ── Telegram helpers ──────────────────────────────────────────────────────────
+
 function itemUrl(bizType: BizType, item: Record<string, string>): string {
-  const no = item.bidNtceNo;
+  const no  = item.bidNtceNo;
   const ord = item.bidNtceOrd ?? '000';
   if (no && HAS_SHOW_PAGE.has(bizType)) return `${APP_URL}/go/${bizType}/${no}-${ord}`;
   return `${APP_URL}/history`;
@@ -39,6 +27,8 @@ function formatKRW(val: string): string {
   if (isNaN(n)) return val;
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
 }
+
+// ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -53,36 +43,50 @@ export async function GET(req: NextRequest) {
   for (const row of config) configMap[row.key] = row.value;
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN || configMap['telegram_bot_token'];
-  const chatId = process.env.TELEGRAM_CHAT_ID || configMap['telegram_chat_id'];
-
+  const chatId   = process.env.TELEGRAM_CHAT_ID   || configMap['telegram_chat_id'];
   if (!botToken || !chatId) {
     return NextResponse.json({ error: 'Telegram not configured' }, { status: 400 });
   }
 
-  // Today's date range in YYYYMMDDHHMM format (KST = UTC+9)
-  const now = new Date();
-  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const today = kst.toISOString().slice(0, 10).replace(/-/g, '');
-  const inqryBgnDt = today + '0000';
-  const inqryEndDt = today + '2359';
-  const dateLabel = `${kst.toISOString().slice(0, 10)}`;
+  const { inqryBgnDt, inqryEndDt, isMorning, todayStr } = getDateRange(new Date());
+  const runLabel = isMorning ? '오전' : '오후';
+  const dateLabel = `${todayStr.slice(0,4)}-${todayStr.slice(4,6)}-${todayStr.slice(6,8)}`;
+
+  // For afternoon run: collect bidNtceNo values already saved today → skip duplicates
+  let existingTodayNos = new Set<string>();
+  if (!isMorning) {
+    const rows = await db
+      .select({ bidNtceNo: bidItems.bidNtceNo })
+      .from(bidItems)
+      .where(gte(bidItems.createdAt, todayStr));
+    existingTodayNos = new Set(rows.map(r => r.bidNtceNo));
+  }
 
   const summary: { bizType: BizType; items: Record<string, string>[]; total: number }[] = [];
 
-  // 1. Fetch from API + upsert into bid_items for each biz type
   for (const bizType of BIZ_TYPES) {
     try {
-      const result = await fetchBidNotices({ bizType, inqryDiv: '1', inqryBgnDt, inqryEndDt, numOfRows: 100 });
+      const result = await fetchAllBidNotices({
+        bizType,
+        inqryDiv: '1',
+        inqryBgnDt,
+        inqryEndDt,
+      });
+
+      // Filter out afternoon duplicates before saving or messaging
+      const newItems = isMorning
+        ? result.items
+        : result.items.filter(item => !existingTodayNos.has(item.bidNtceNo));
 
       await db.insert(searchSessions).values({
         apiType: `bid_${bizType}`,
         searchParams: JSON.stringify({ bizType, inqryDiv: '1', inqryBgnDt, inqryEndDt }),
-        resultCount: result.totalCount,
-        results: JSON.stringify(result.items),
+        resultCount: newItems.length,
+        results: JSON.stringify(newItems),
       });
 
-      for (const item of result.items) {
-        const no = item.bidNtceNo;
+      for (const item of newItems) {
+        const no  = item.bidNtceNo;
         const ord = item.bidNtceOrd ?? '000';
         if (!no) continue;
         await db.insert(bidItems).values({
@@ -96,22 +100,19 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      summary.push({ bizType, items: result.items, total: result.totalCount });
+      summary.push({ bizType, items: newItems, total: newItems.length });
     } catch (err) {
       console.error(`Cron fetch failed for ${bizType}:`, err);
       summary.push({ bizType, items: [], total: 0 });
     }
   }
 
-  // 2. Build Telegram message
-  const header = `📋 <b>나라장터 일일 요약</b> (${dateLabel})\n━━━━━━━━━━━━━━\n\n`;
+  // Build Telegram message
+  const header = `📋 <b>나라장터 ${runLabel} 요약</b> (${dateLabel})\n<i>${inqryBgnDt.slice(0,4)}-${inqryBgnDt.slice(4,6)}-${inqryBgnDt.slice(6,8)} ${inqryBgnDt.slice(8,10)}:${inqryBgnDt.slice(10,12)} → ${inqryEndDt.slice(8,10)}:${inqryEndDt.slice(10,12)}</i>\n━━━━━━━━━━━━━━\n\n`;
   const itemBlocks: string[] = [];
 
   for (const { bizType, items, total } of summary) {
-    const icon = BIZ_ICON[bizType];
-    const label = BIZ_LABEL[bizType];
-
-    itemBlocks.push(`${icon} <b>${label}</b> · ${total}건\n━━━━━━━━━━━━━━━━\n`);
+    itemBlocks.push(`${BIZ_ICON[bizType]} <b>${BIZ_LABEL[bizType]}</b> · ${total}건\n━━━━━━━━━━━━━━━━\n`);
 
     if (items.length === 0) {
       itemBlocks.push(`결과 없음\n\n`);
@@ -121,16 +122,16 @@ export async function GET(req: NextRequest) {
     items
       .sort((a, b) => Number(b.presmptPrce || b.asignBdgtAmt || 0) - Number(a.presmptPrce || a.asignBdgtAmt || 0))
       .forEach((item, i) => {
-        const name = item.bidNtceNm ?? '(이름 없음)';
+        const name        = item.bidNtceNm ?? '(이름 없음)';
         const institution = item.ntceInsttNm ?? item.dminsttNm ?? '';
-        const amount = item.presmptPrce || item.asignBdgtAmt || '';
-        const deadline = item.bidClseDt ?? '';
-        const url = itemUrl(bizType, item);
+        const amount      = item.presmptPrce || item.asignBdgtAmt || '';
+        const deadline    = item.bidClseDt ?? '';
+        const url         = itemUrl(bizType, item);
 
         let block = `\n<b>${i + 1}.</b> <a href="${url}">${name}</a>\n`;
         if (institution) block += `   🏢 ${institution}\n`;
-        if (amount) block += `   💰 ${formatKRW(amount)}\n`;
-        if (deadline) block += `   📅 마감: ${deadline.slice(0, 16)}\n`;
+        if (amount)      block += `   💰 ${formatKRW(amount)}\n`;
+        if (deadline)    block += `   📅 마감: ${deadline.slice(0, 16)}\n`;
 
         itemBlocks.push(block);
       });
@@ -142,6 +143,10 @@ export async function GET(req: NextRequest) {
 
   await sendTelegramSplit(header, itemBlocks, footer, botToken, chatId);
 
-  const totalItems = summary.reduce((s, r) => s + r.items.length, 0);
-  return NextResponse.json({ sent: true, totalItems, byType: Object.fromEntries(summary.map(s => [s.bizType, s.total])) });
+  return NextResponse.json({
+    sent: true,
+    run: runLabel,
+    range: `${inqryBgnDt} → ${inqryEndDt}`,
+    byType: Object.fromEntries(summary.map(s => [s.bizType, s.total])),
+  });
 }
