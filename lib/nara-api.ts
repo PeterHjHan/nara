@@ -93,7 +93,10 @@ export async function fetchBidNotices(params: BidSearchParams): Promise<ApiRespo
   }
 
   const body = (data.response as Record<string, unknown>)?.body as Record<string, unknown> | undefined;
-  const raw = (body?.items as Record<string, unknown>)?.item ?? [];
+  const bodyItems = body?.items;
+  const raw = Array.isArray(bodyItems)
+    ? bodyItems
+    : ((bodyItems as Record<string, unknown>)?.item ?? []);
   const items = Array.isArray(raw) ? raw : [raw];
 
   return {

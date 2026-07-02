@@ -19,8 +19,16 @@ export default function SettingsPage() {
   const [testMsg, setTestMsg] = useState('');
   const [testing, setTesting] = useState<false | 'morning' | 'afternoon'>(false);
 
+  const DEFAULTS: Partial<Settings> = {
+    keyword_dminstt: '외교부\n한국국제협력단\n해외건설협회\n한국해외인프라도시개발지원공사\nKOICA',
+    keyword_bidntce: 'ODA\nPMC\nPMO\n종료평가\n성과평가\n타당성조사\nF/S\n기획조사\n심층조사\n예비타당성',
+  };
+
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(setSettings).finally(() => setLoading(false));
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then((data: Settings) => setSettings({ ...DEFAULTS, ...data }))
+      .finally(() => setLoading(false));
   }, []);
 
   const save = async () => {
@@ -196,7 +204,7 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mb-2">dminsttNm(수요기관명) 또는 ntceInsttNm(공고기관명)에 포함된 경우 매칭</p>
             <textarea
               rows={6}
-              value={settings.keyword_dminstt ?? '외교부\n한국국제협력단\n해외건설협회\n한국해외인프라도시개발지원공사\nKOICA'}
+              value={settings.keyword_dminstt ?? ''}
               onChange={e => setSettings(s => ({ ...s, keyword_dminstt: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               placeholder="외교부&#10;한국국제협력단&#10;KOICA"
@@ -208,7 +216,7 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mb-2">bidNtceNm(공고명)에 포함된 경우 매칭</p>
             <textarea
               rows={8}
-              value={settings.keyword_bidntce ?? 'ODA\nPMC\nPMO\n종료평가\n성과평가\n타당성조사\nF/S\n컨설팅\n기획조사\n심층조사\n예비타당성'}
+              value={settings.keyword_bidntce ?? ''}
               onChange={e => setSettings(s => ({ ...s, keyword_bidntce: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               placeholder="ODA&#10;PMC&#10;PMO&#10;종료평가"
