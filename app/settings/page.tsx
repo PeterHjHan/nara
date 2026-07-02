@@ -17,7 +17,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testMsg, setTestMsg] = useState('');
-  const [testing, setTesting] = useState(false);
+  const [testing, setTesting] = useState<false | 'morning' | 'afternoon'>(false);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings).finally(() => setLoading(false));
@@ -36,13 +36,19 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const testTelegram = async () => {
-    setTesting(true);
+  const runCron = async (force: 'morning' | 'afternoon') => {
+    setTesting(force);
     setTestMsg('');
     try {
-      const res = await fetch('/api/cron');
+      const res = await fetch(`/api/cron?force=${force}`);
       const data = await res.json();
-      setTestMsg(data.error ? `❌ ${data.error}` : `✅ 전송 완료 (${data.sessions}건의 검색 기록)`);
+      if (data.error) {
+        setTestMsg(`❌ ${data.error}`);
+      } else {
+        const byType = Object.entries(data.byType as Record<string, number>)
+          .map(([k, v]) => `${k}: ${v}건`).join(', ');
+        setTestMsg(`✅ ${data.run} 전송 완료 | 범위: ${data.range} | ${byType}`);
+      }
     } catch {
       setTestMsg('❌ 연결 실패');
     } finally {
@@ -121,14 +127,25 @@ export default function SettingsPage() {
             </ol>
           </div>
 
-          <button
-            onClick={testTelegram}
-            disabled={testing || !settings.telegram_bot_token || !settings.telegram_chat_id}
-            className="text-sm px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
-          >
-            {testing ? '전송 중...' : '테스트 메시지 전송'}
-          </button>
-          {testMsg && <p className="mt-2 text-sm">{testMsg}</p>}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => runCron('morning')}
+              disabled={!!testing || !settings.telegram_bot_token || !settings.telegram_chat_id}
+              className="text-sm px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors"
+            >
+              {testing === 'morning' ? '전송 중...' : '🌅 오전 조회 테스트'}
+            </button>
+            <button
+              onClick={() => runCron('afternoon')}
+              disabled={!!testing || !settings.telegram_bot_token || !settings.telegram_chat_id}
+              className="text-sm px-4 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
+            >
+              {testing === 'afternoon' ? '전송 중...' : '🌇 오후 조회 테스트'}
+            </button>
+          </div>
+          {testMsg && (
+            <p className="mt-3 text-xs bg-gray-50 rounded-lg p-3 text-gray-700 font-mono break-all">{testMsg}</p>
+          )}
         </section>
 
         {/* Cron Schedule */}

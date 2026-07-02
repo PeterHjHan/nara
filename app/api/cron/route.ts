@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { inqryBgnDt, inqryEndDt, isMorning, todayStr } = getDateRange(new Date());
+  const forceParam = new URL(req.url).searchParams.get('force') as 'morning' | 'afternoon' | null;
+  const { inqryBgnDt, inqryEndDt, isMorning, todayStr } = getDateRange(new Date(), forceParam ?? undefined);
   const runLabel = isMorning ? '오전' : '오후';
   const dateLabel = `${todayStr.slice(0,4)}-${todayStr.slice(4,6)}-${todayStr.slice(6,8)}`;
 

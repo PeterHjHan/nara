@@ -25,11 +25,11 @@ function addDays(d: Date, n: number): Date {
  * Afternoon run (KST ~15:00, kstHour >= 12):
  *   Any → today 08:01 → today 15:00
  */
-export function getDateRange(nowUtc: Date): DateRange {
+export function getDateRange(nowUtc: Date, force?: 'morning' | 'afternoon'): DateRange {
   const kst     = new Date(nowUtc.getTime() + 9 * 60 * 60 * 1000);
   const kstHour = kst.getUTCHours();
   const kstDay  = kst.getUTCDay(); // 0=Sun 1=Mon … 5=Fri 6=Sat
-  const isMorning = kstHour < 12;
+  const isMorning = force ? force === 'morning' : kstHour < 12;
   const todayStr  = ymd(kst);
 
   let inqryBgnDt: string;
